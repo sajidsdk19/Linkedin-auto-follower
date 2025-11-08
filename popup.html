@@ -6,10 +6,20 @@
 </head>
 <body>
   <h1>LinkedIn Connection Auto-Increase</h1>
-  <label for="delayInput">Delay (ms):</label>
-  <input type="number" id="delayInput" value="5000"> <br><br>
-  <button id="startButton">Start Connecting</button>
-  <button id="testButton">Test (Find Buttons)</button>
+  <div class="form-group">
+    <label for="delayInput">Delay between connections (ms):</label>
+    <input type="number" id="delayInput" value="5000" min="1000" step="1000">
+  </div>
+  
+  <div class="form-group">
+    <label for="maxConnections">Max connections (1-30):</label>
+    <input type="number" id="maxConnections" value="10" min="1" max="30">
+  </div>
+  
+  <div class="button-group">
+    <button id="startButton" class="primary">Start Connecting</button>
+    <button id="testButton">Test Buttons</button>
+  </div>
   <div id="status"></div>
   <script src="popup.js"></script>
 </body>

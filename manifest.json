@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "LinkedIn Connection Auto-Increase",
-  "version": "2.3",
+  "version": "2.4",
   "description": "Automatically sends connection requests to LinkedIn users.",
   "permissions": [
     "activeTab",

@@ -2,6 +2,9 @@
 
 let isConnecting = false;
 let connectingInterval = null;
+let isProcessing = false;
+let totalToSend = 0; // target number of connections to send in this run (max 30)
+let sentCount = 0;   // number of connections sent in this run
 
 function findConnectButtons() {
   // Get all span elements with the specific button text "Connect"
@@ -47,9 +50,13 @@ function observeDOM(targetNode) {
   const observerCallback = (mutationsList) => {
     for (const mutation of mutationsList) {
       if (mutation.type === 'childList') {
-        const buttons = findConnectButtons();
-        if (buttons.length > 0) {
-          processButtons(buttons);
+        // Only (re)process if we're connecting but not already processing
+        if (isConnecting && !isProcessing) {
+          const buttons = findConnectButtons();
+          if (buttons.length > 0) {
+            isProcessing = true;
+            processButtons(buttons);
+          }
         }
       }
     }
@@ -62,15 +69,17 @@ function observeDOM(targetNode) {
 function processButtons(buttons) {
   let index = 0;
   function clickNextButton() {
-    if (index >= buttons.length) {
-      console.log("All connect buttons clicked.");
-      alert(`Finished! Sent ${buttons.length} connection requests.`);
+    if (sentCount >= totalToSend || index >= buttons.length) {
+      console.log("Finished batch.");
+      alert(`Finished! Sent ${sentCount} connection requests.`);
+      isProcessing = false;
       stopConnecting();
       return;
     }
 
     const button = buttons[index];
     simulateClick(button, index + 1, buttons.length);
+    sentCount++;
     index++;
     
     // Schedule the next button click after a slight delay
@@ -80,8 +89,11 @@ function processButtons(buttons) {
   clickNextButton();
 }
 
-function startConnecting(delay) {
+function startConnecting(delay, count) {
   isConnecting = true;
+  isProcessing = false;
+  totalToSend = Math.min(Number(count) || 30, 30);
+  sentCount = 0;
   console.log('Starting to follow with delay:', delay);
   
   const targetNode = document.body; // Start observing from the body
@@ -90,6 +102,7 @@ function startConnecting(delay) {
   setTimeout(() => {
     const buttons = findConnectButtons();
     if (buttons && buttons.length > 0) {
+      isProcessing = true;
       processButtons(buttons);
     } else {
       console.log("No buttons to process after initial delay.");
@@ -112,7 +125,8 @@ window.addEventListener('message', (event) => {
 
   if (event.data.type === 'START_FOLLOWING') {
     const delay = event.data.delay || 5000;
-    startConnecting(delay);
+    const count = Math.min(Number(event.data.count) || 30, 30);
+    startConnecting(delay, count);
   } else if (event.data.type === 'STOP_FOLLOWING') {
     stopConnecting();
   }
