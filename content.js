@@ -1,4 +1,5 @@
 // Content script for LinkedIn Connection Auto-Increase extension
+
 let isConnecting = false;
 let connectingInterval = null;
 
@@ -66,17 +67,28 @@ function startConnecting(delay) {
       
       setTimeout(() => {
         try {
-          button.click();
-          console.log(`Clicked connect button ${index + 1} of ${connectButtons.length}`);
+          // Click the button after a slight delay to simulate human interaction
+          setTimeout(() => {
+            button.click();
+            console.log(`Clicked connect button ${index + 1} of ${connectButtons.length}`);
+          }, 200); // Additional delay for human-like interaction
+            
+          index++;
         } catch (e) {
           console.error(`Error clicking button ${index + 1}:`, e);
         }
-      }, 500);
+      }, delay);
     } else {
       console.log(`Button ${index + 1} not visible or disabled, skipping.`);
     }
 
-    index++;
+    // Add a small delay before processing the next button
+    setTimeout(() => {
+      connectingInterval = setInterval(() => {
+        startConnecting(delay);
+      }, 100); // Small delay to allow the page to respond
+    }, 500);
+
   }, delay);
 }
 
