@@ -66,6 +66,8 @@ function observeDOM(targetNode) {
   observer.observe(targetNode, observerOptions);
 }
 
+let connectionDelay = 5000; // Default delay if not specified
+
 function processButtons(buttons) {
   let index = 0;
   function clickNextButton() {
@@ -82,8 +84,9 @@ function processButtons(buttons) {
     sentCount++;
     index++;
     
-    // Schedule the next button click after a slight delay
-    setTimeout(clickNextButton, 5000); // Small delay to allow the page to respond
+    // Schedule the next button click using the configured delay
+    console.log(`Next connection in ${connectionDelay}ms...`);
+    setTimeout(clickNextButton, connectionDelay);
   }
 
   clickNextButton();
@@ -94,7 +97,8 @@ function startConnecting(delay, count) {
   isProcessing = false;
   totalToSend = Math.min(Number(count) || 30, 30);
   sentCount = 0;
-  console.log('Starting to follow with delay:', delay);
+  connectionDelay = Math.max(1000, Number(delay) || 5000); // Ensure minimum 1s delay
+  console.log('Starting to follow with delay:', connectionDelay, 'ms, max connections:', totalToSend);
   
   const targetNode = document.body; // Start observing from the body
   observeDOM(targetNode);
