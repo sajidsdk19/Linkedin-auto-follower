@@ -1,6 +1,6 @@
-# LinkedIn Connection Auto-Increase Extension
+# LinkedIn Connection Auto-Increase Google ChromeExtension
 
-> Developed by **Sajid Khan**  (https://sajidkhan.me)
+> Developed by [**Sajid Khan**](https://sajidkhan.me)
 > CTO at [**TechScape**](https://solutions.techscape.pk)
 
 A Chrome extension that automates sending LinkedIn connection requests with customizable delays between requests.
