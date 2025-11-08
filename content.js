@@ -6,25 +6,21 @@ let connectingInterval = null;
 function findConnectButtons() {
   // Get all span elements with the specific button text "Connect"
   const allSpans = Array.from(document.querySelectorAll('span'));
-  const connectButtons = allSpans.filter(span => span.textContent.trim() === 'Connect');
-  
-  return connectButtons.map(span => span.closest('.button-class')); // Adjust .button-class to match the actual class of the button
+  return allSpans.filter(span => span.textContent.trim() === 'Connect');
 }
 
-function clickButton(button) {
+function simulateClick(button) {
   if (button.offsetWidth > 0 && button.offsetHeight > 0 && !button.disabled) {
-    // Scroll button into view
-    button.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    
-    // Click the button after a slight delay to simulate human interaction
-    setTimeout(() => {
-      try {
-        button.click();
-        console.log(`Clicked connect button ${index + 1} of ${connectButtons.length}`);
-      } catch (e) {
-        console.error(`Error clicking button ${index + 1}:`, e);
-      }
-    }, 200); // Additional delay for human-like interaction
+    // Create a mouse event
+    const clickEvent = new MouseEvent('click', {
+      view: window,
+      bubbles: true,
+      cancelable: true
+    });
+
+    // Dispatch the click event
+    button.dispatchEvent(clickEvent);
+    console.log(`Simulated click on connect button ${index + 1} of ${connectButtons.length}`);
   } else {
     console.log(`Button ${index + 1} not visible or disabled, skipping.`);
   }
@@ -62,7 +58,7 @@ function processButtons(buttons) {
     }
 
     const button = buttons[index];
-    clickButton(button);
+    simulateClick(button);
     index++;
     
     // Schedule the next button click after a slight delay
