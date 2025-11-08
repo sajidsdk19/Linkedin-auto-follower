@@ -3,6 +3,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const maxConnectionsInput = document.getElementById('maxConnections');
   const startButton = document.getElementById('startButton');
   const testButton = document.getElementById('testButton');
+  const openLinkedInBtn = document.getElementById('openLinkedIn');
   const statusDiv = document.getElementById('status');
 
   startButton.addEventListener('click', async () => {
@@ -28,6 +29,27 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (error) {
       console.error('Error starting connection process:', error);
       statusDiv.textContent = 'Error: ' + (error.message || 'Failed to start');
+      statusDiv.className = 'status-error';
+    }
+  });
+
+  // Open LinkedIn in a new tab
+  openLinkedInBtn.addEventListener('click', async () => {
+    try {
+      // Check if we're already on a LinkedIn page
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      
+      if (tab.url && tab.url.includes('linkedin.com')) {
+        // If already on LinkedIn, refresh the page
+        await chrome.tabs.reload(tab.id);
+      } else {
+        // If not on LinkedIn, open a new tab to the grow connections page
+        await chrome.tabs.create({ url: 'https://www.linkedin.com/mynetwork/grow/' });
+      }
+      window.close(); // Close the popup
+    } catch (error) {
+      console.error('Error opening LinkedIn:', error);
+      statusDiv.textContent = 'Error: Could not open LinkedIn';
       statusDiv.className = 'status-error';
     }
   });
