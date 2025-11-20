@@ -1,110 +1,107 @@
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   const delayInput = document.getElementById('delayInput');
   const maxConnectionsInput = document.getElementById('maxConnections');
   const startButton = document.getElementById('startButton');
-  const testButton = document.getElementById('testButton');
+  const stopButton = document.getElementById('stopButton');
   const openLinkedInBtn = document.getElementById('openLinkedIn');
-  const statusDiv = document.getElementById('status');
+  const statusArea = document.getElementById('statusArea');
+  const statusText = document.getElementById('statusText');
+  const progressFill = document.getElementById('progressFill');
+
+  // Load saved settings
+  const saved = await chrome.storage.sync.get(['delay', 'maxConnections']);
+  if (saved.delay) delayInput.value = saved.delay;
+  if (saved.maxConnections) maxConnectionsInput.value = saved.maxConnections;
+
+  // Check current status
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tab?.url?.includes('linkedin.com')) {
+    try {
+      const response = await chrome.tabs.sendMessage(tab.id, { type: 'GET_STATUS' });
+      if (response && response.isConnecting) {
+        showRunningState(response.sent, response.total);
+      }
+    } catch (e) {
+      // Content script might not be ready or not injected
+    }
+  }
 
   startButton.addEventListener('click', async () => {
     const delay = Math.max(1000, parseInt(delayInput.value, 10) || 5000);
-    const maxConnections = Math.min(30, Math.max(1, parseInt(maxConnectionsInput.value, 10) || 10));
+    const maxConnections = Math.min(100, Math.max(1, parseInt(maxConnectionsInput.value, 10) || 30));
 
-    // Update inputs to show validated values
-    delayInput.value = delay;
-    maxConnectionsInput.value = maxConnections;
+    // Save settings
+    chrome.storage.sync.set({ delay, maxConnections });
 
-    // Get the current active tab
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
+    if (!tab.url.includes('linkedin.com')) {
+      statusText.textContent = 'Please go to LinkedIn first';
+      statusArea.style.display = 'block';
+      return;
+    }
+
     try {
-      await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        function: startFollowing,
-        args: [delay, maxConnections]
+      await chrome.tabs.sendMessage(tab.id, {
+        type: 'START_FOLLOWING',
+        delay,
+        count: maxConnections
       });
-      
-      statusDiv.textContent = `Sending up to ${maxConnections} connections...`;
-      statusDiv.className = 'status-success';
+
+      showRunningState(0, maxConnections);
     } catch (error) {
-      console.error('Error starting connection process:', error);
-      statusDiv.textContent = 'Error: ' + (error.message || 'Failed to start');
-      statusDiv.className = 'status-error';
+      console.error('Error:', error);
+      statusText.textContent = 'Refresh the page and try again';
+      statusArea.style.display = 'block';
     }
   });
 
-  // Open LinkedIn in a new tab
-  openLinkedInBtn.addEventListener('click', async () => {
+  stopButton.addEventListener('click', async () => {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     try {
-      // Check if we're already on a LinkedIn page
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      
-      if (tab.url && tab.url.includes('linkedin.com')) {
-        // If already on LinkedIn, refresh the page
-        await chrome.tabs.reload(tab.id);
-      } else {
-        // If not on LinkedIn, open a new tab to the grow connections page
-        await chrome.tabs.create({ url: 'https://www.linkedin.com/mynetwork/grow/' });
-      }
-      window.close(); // Close the popup
+      await chrome.tabs.sendMessage(tab.id, { type: 'STOP_FOLLOWING' });
+      showStoppedState();
     } catch (error) {
-      console.error('Error opening LinkedIn:', error);
-      statusDiv.textContent = 'Error: Could not open LinkedIn';
-      statusDiv.className = 'status-error';
+      console.error(error);
     }
   });
 
-  testButton.addEventListener('click', async () => {
-    statusDiv.textContent = 'Testing... Check console (F12)';
-    statusDiv.className = 'status-info';
-    
-    try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        function: testFindButtons
-      });
-    } catch (error) {
-      console.error('Error testing buttons:', error);
-      statusDiv.textContent = 'Error: ' + (error.message || 'Failed to test buttons');
-      statusDiv.className = 'status-error';
+  openLinkedInBtn.addEventListener('click', () => {
+    chrome.tabs.create({ url: 'https://www.linkedin.com/mynetwork/' });
+  });
+
+  // Listen for updates from content script
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message.type === 'UPDATE_STATUS') {
+      updateProgress(message.sent, message.total);
     }
   });
+
+  function showRunningState(sent, total) {
+    startButton.style.display = 'none';
+    stopButton.style.display = 'block';
+    statusArea.style.display = 'block';
+    delayInput.disabled = true;
+    maxConnectionsInput.disabled = true;
+    updateProgress(sent, total);
+  }
+
+  function showStoppedState() {
+    startButton.style.display = 'block';
+    stopButton.style.display = 'none';
+    delayInput.disabled = false;
+    maxConnectionsInput.disabled = false;
+    statusText.textContent = 'Stopped';
+  }
+
+  function updateProgress(sent, total) {
+    const percentage = (sent / total) * 100;
+    progressFill.style.width = `${percentage}%`;
+    statusText.textContent = `Sent ${sent} of ${total} requests`;
+
+    if (sent >= total) {
+      showStoppedState();
+      statusText.textContent = 'Completed!';
+    }
+  }
 });
-
-function startFollowing(delay, maxConnections) {
-  // This function will be injected into the page
-  console.log("Starting to follow with delay:", delay, "max connections:", maxConnections);
-  
-  // Send message to content script
-  window.postMessage({ 
-    type: 'START_FOLLOWING', 
-    delay: delay,
-    count: maxConnections
-  }, '*');
-}
-
-function testFindButtons() {
-  // Test function to find and log all potential Connect buttons
-  console.log("=== Testing Button Detection ===");
-  
-  const allButtons = document.querySelectorAll('button');
-  console.log(`Total buttons on page: ${allButtons.length}`);
-  
-  const connectButtons = Array.from(allButtons).filter(button => {
-    const text = button.textContent || button.innerText || '';
-    const ariaLabel = button.getAttribute('aria-label') || '';
-    return text.includes('Connect') || ariaLabel.includes('Invite') || ariaLabel.includes('Connect');
-  });
-  
-  console.log(`Connect buttons found: ${connectButtons.length}`);
-  connectButtons.forEach((btn, i) => {
-    console.log(`Button ${i + 1}:`, {
-      text: btn.textContent.trim(),
-      ariaLabel: btn.getAttribute('aria-label'),
-      classes: btn.className
-    });
-  });
-  
-  alert(`Found ${connectButtons.length} Connect buttons. Check console (F12) for details.`);
-}

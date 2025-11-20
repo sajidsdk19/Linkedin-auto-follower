@@ -1,139 +1,124 @@
 // Content script for LinkedIn Connection Auto-Increase extension
 
 let isConnecting = false;
-let connectingInterval = null;
-let isProcessing = false;
-let totalToSend = 0; // target number of connections to send in this run (max 30)
-let sentCount = 0;   // number of connections sent in this run
+let connectionDelay = 5000;
+let totalToSend = 0;
+let sentCount = 0;
+let processingTimeout = null;
 
+// Enhanced button detection
 function findConnectButtons() {
-  // Get all span elements with the specific button text "Connect"
-  const allSpans = Array.from(document.querySelectorAll('span'));
+  // Look for buttons with specific text or aria-labels
+  const buttons = Array.from(document.querySelectorAll('button'));
   
-  if (!allSpans || allSpans.length === 0) {
-    console.log("No spans found.");
-    return [];
-  }
-
-  const connectButtons = allSpans.filter(span => span.textContent.trim() === 'Connect');
-  
-  if (connectButtons.length === 0) {
-    console.log("No 'Connect' buttons found within spans.");
-  }
-  
-  return connectButtons;
-}
-
-function simulateClick(button, index, total) {
-  if (button.offsetWidth > 0 && button.offsetHeight > 0 && !button.disabled) {
-    // Create a mouse event
-    const clickEvent = new MouseEvent('click', {
-      view: window,
-      bubbles: true,
-      cancelable: true
-    });
-
-    // Dispatch the click event
-    button.dispatchEvent(clickEvent);
-    console.log(`Simulated click on connect button ${index} of ${total}`);
-  } else {
-    console.log(`Button ${index} not visible or disabled, skipping.`);
-  }
-}
-
-function observeDOM(targetNode) {
-  const observerOptions = {
-    childList: true,
-    subtree: true
-  };
-
-  const observerCallback = (mutationsList) => {
-    for (const mutation of mutationsList) {
-      if (mutation.type === 'childList') {
-        // Only (re)process if we're connecting but not already processing
-        if (isConnecting && !isProcessing) {
-          const buttons = findConnectButtons();
-          if (buttons.length > 0) {
-            isProcessing = true;
-            processButtons(buttons);
-          }
-        }
-      }
-    }
-  };
-
-  const observer = new MutationObserver(observerCallback);
-  observer.observe(targetNode, observerOptions);
-}
-
-let connectionDelay = 5000; // Default delay if not specified
-
-function processButtons(buttons) {
-  let index = 1;
-  function clickNextButton() {
-    if (sentCount >= totalToSend || index >= buttons.length) {
-      console.log("Finished batch.");
-      alert(`Finished! Sent ${sentCount} connection requests.`);
-      isProcessing = false;
-      stopConnecting();
-      return;
-    }
-
-    const button = buttons[index];
-    simulateClick(button, index + 1, buttons.length);
-    sentCount++;
-    index++;
+  return buttons.filter(button => {
+    const text = (button.textContent || '').trim();
+    const ariaLabel = (button.getAttribute('aria-label') || '').trim();
     
-    // Schedule the next button click using the configured delay
-    console.log(`Next connection in ${connectionDelay}ms...`);
-    setTimeout(clickNextButton, connectionDelay);
+    // Check for "Connect" text
+    const hasConnectText = text === 'Connect';
+    
+    // Check for "Invite [Name] to connect" or similar in aria-label
+    const hasConnectAria = ariaLabel.includes('Invite') && ariaLabel.includes('connect');
+    
+    // Exclude "Pending" or "Withdraw" buttons just in case
+    const isPending = text === 'Pending' || text === 'Withdraw';
+    
+    return (hasConnectText || hasConnectAria) && !isPending && !button.disabled;
+  });
+}
+
+function simulateClick(button) {
+  if (button && !button.disabled) {
+    button.click();
+    console.log('Clicked connection button');
+    return true;
+  }
+  return false;
+}
+
+function processNextButton() {
+  if (!isConnecting) return;
+
+  if (sentCount >= totalToSend) {
+    console.log("Reached target connection count.");
+    stopConnecting();
+    alert(`Finished! Sent ${sentCount} connection requests.`);
+    return;
   }
 
-  clickNextButton();
+  const buttons = findConnectButtons();
+  
+  // We always take the first available button because the list might change 
+  // (e.g. buttons disappear after clicking)
+  if (buttons.length > 0) {
+    const button = buttons[0];
+    const success = simulateClick(button);
+    
+    if (success) {
+      sentCount++;
+      // Send progress update to popup
+      chrome.runtime.sendMessage({
+        type: 'UPDATE_STATUS',
+        sent: sentCount,
+        total: totalToSend
+      }).catch(() => {
+        // Popup might be closed, ignore error
+      });
+    }
+    
+    // Schedule next click
+    const randomVariation = Math.floor(Math.random() * 1000); // Add up to 1s random variation
+    const nextDelay = connectionDelay + randomVariation;
+    
+    console.log(`Next request in ${nextDelay}ms. Progress: ${sentCount}/${totalToSend}`);
+    processingTimeout = setTimeout(processNextButton, nextDelay);
+    
+  } else {
+    console.log("No 'Connect' buttons found. Scrolling and retrying...");
+    window.scrollBy(0, 500);
+    
+    // Retry after a short delay to allow content to load
+    processingTimeout = setTimeout(processNextButton, 2000);
+  }
 }
 
 function startConnecting(delay, count) {
-  isConnecting = true;
-  isProcessing = false;
-  totalToSend = Math.min(Number(count) || 30, 30);
-  sentCount = 0;
-  connectionDelay = Math.max(1000, Number(delay) || 5000); // Ensure minimum 1s delay
-  console.log('Starting to follow with delay:', connectionDelay, 'ms, max connections:', totalToSend);
+  if (isConnecting) return;
   
-  const targetNode = document.body; // Start observing from the body
-  observeDOM(targetNode);
-
-  setTimeout(() => {
-    const buttons = findConnectButtons();
-    if (buttons && buttons.length > 0) {
-      isProcessing = true;
-      processButtons(buttons);
-    } else {
-      console.log("No buttons to process after initial delay.");
-    }
-  }, delay); // Initial processing after the initial delay
+  isConnecting = true;
+  connectionDelay = Math.max(1000, Number(delay) || 5000);
+  totalToSend = Math.min(Number(count) || 30, 100); // Cap at 100 for safety
+  sentCount = 0;
+  
+  console.log(`Starting: Delay=${connectionDelay}ms, Target=${totalToSend}`);
+  processNextButton();
 }
 
 function stopConnecting() {
   isConnecting = false;
-  if (connectingInterval) {
-    clearInterval(connectingInterval);
-    connectingInterval = null;
+  if (processingTimeout) {
+    clearTimeout(processingTimeout);
+    processingTimeout = null;
   }
   console.log("Stopped connecting.");
 }
 
 // Listen for messages from popup
-window.addEventListener('message', (event) => {
-  if (event.source !== window) return;
-
-  if (event.data.type === 'START_FOLLOWING') {
-    const delay = event.data.delay || 5000;
-    const count = Math.min(Number(event.data.count) || 30, 30);
-    startConnecting(delay, count);
-  } else if (event.data.type === 'STOP_FOLLOWING') {
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.type === 'START_FOLLOWING') {
+    startConnecting(request.delay, request.count);
+    sendResponse({ success: true, message: 'Started' });
+  } else if (request.type === 'STOP_FOLLOWING') {
     stopConnecting();
+    sendResponse({ success: true, message: 'Stopped' });
+  } else if (request.type === 'GET_STATUS') {
+    sendResponse({ 
+      isConnecting: isConnecting,
+      sent: sentCount,
+      total: totalToSend
+    });
   }
 });
 
-console.log("LinkedIn Connection Auto-Increase content script loaded.");
+console.log("LinkedIn Connection Auto-Increase content script loaded (v2.7).");
